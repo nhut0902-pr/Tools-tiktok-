@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { PdfPage, OutputFormat, AppState } from './types';
 
-// Global libraries from CDN
+// Thư viện global từ CDN
 declare const pdfjsLib: any;
 declare const JSZip: any;
 
