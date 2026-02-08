@@ -17,7 +17,7 @@
         }
     </style>
     <script>
-        // Polyfill để tránh lỗi "process is not defined" trong môi trường trình duyệt
+        // Polyfill để tránh lỗi "process is not defined"
         window.process = { env: { NODE_ENV: 'production' } };
         window.global = window;
     </script>
