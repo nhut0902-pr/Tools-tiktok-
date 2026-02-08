@@ -1,12 +1,9 @@
-
 export interface PdfPage {
   index: number;
   dataUrl: string;
   width: number;
   height: number;
   selected: boolean;
-  insight?: string;
-  isAnalyzing?: boolean;
 }
 
 export enum OutputFormat {

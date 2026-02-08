@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   FileUp, 
@@ -20,9 +19,9 @@ import {
   Layers,
   ShieldCheck
 } from 'lucide-react';
-import { PdfPage, OutputFormat, AppState } from './types.ts';
+import { PdfPage, OutputFormat, AppState } from './types';
 
-// Khai báo các thư viện từ CDN
+// Khai báo các thư viện toàn cục từ CDN
 declare const pdfjsLib: any;
 declare const JSZip: any;
 
@@ -56,10 +55,16 @@ const App: React.FC = () => {
   const [isZipping, setIsZipping] = useState(false);
 
   useEffect(() => {
-    // Khởi tạo PDF.js Worker
-    if (typeof pdfjsLib !== 'undefined') {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    }
+    // Khởi tạo PDF.js Worker an toàn
+    const initWorker = () => {
+      if (typeof pdfjsLib !== 'undefined') {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      } else {
+        // Thử lại sau 500ms nếu thư viện chưa tải xong
+        setTimeout(initWorker, 500);
+      }
+    };
+    initWorker();
   }, []);
 
   const resetPdfState = () => {
@@ -79,7 +84,7 @@ const App: React.FC = () => {
     }
     
     if (typeof pdfjsLib === 'undefined') {
-      alert('Đang tải thư viện xử lý PDF, vui lòng đợi trong giây lát...');
+      alert('Thư viện xử lý PDF đang tải, vui lòng đợi vài giây và thử lại.');
       return;
     }
 
@@ -94,8 +99,7 @@ const App: React.FC = () => {
 
       for (let i = 1; i <= numPages; i++) {
         const page = await pdf.getPage(i);
-        // Scale cao (3.0) để ảnh cực nét
-        const viewport = page.getViewport({ scale: 3.0 }); 
+        const viewport = page.getViewport({ scale: 2.5 }); // Độ phân giải cao cho ảnh nét
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
         
@@ -105,8 +109,7 @@ const App: React.FC = () => {
           
           await page.render({ 
             canvasContext: context, 
-            viewport,
-            intent: 'print' // Tối ưu cho chất lượng ảnh
+            viewport 
           }).promise;
           
           const dataUrl = canvas.toDataURL(state.format, state.quality);
@@ -119,8 +122,8 @@ const App: React.FC = () => {
           });
         }
         
-        // Cập nhật UI theo từng đợt để không bị treo trình duyệt
-        if (i % 2 === 0 || i === numPages) {
+        // Cập nhật giao diện từng phần
+        if (i % 3 === 0 || i === numPages) {
           setState(prev => ({ ...prev, pages: [...loadedPages] }));
         }
       }
@@ -128,7 +131,7 @@ const App: React.FC = () => {
       setState(prev => ({ ...prev, isProcessing: false }));
     } catch (error) {
       console.error('Lỗi PDF:', error);
-      alert('Không thể xử lý file PDF này. File có thể bị hỏng hoặc có mật khẩu.');
+      alert('Không thể đọc file PDF này. Có thể file bị khóa hoặc lỗi định dạng.');
       setState(prev => ({ ...prev, isProcessing: false }));
     }
   };
@@ -140,13 +143,14 @@ const App: React.FC = () => {
     if (selectedPages.length === 1) {
       const link = document.createElement('a');
       link.href = selectedPages[0].dataUrl;
-      link.download = `${state.fileName}_P${selectedPages[0].index}.${state.format === OutputFormat.PNG ? 'png' : 'jpg'}`;
+      link.download = `${state.fileName}_Trang_${selectedPages[0].index}.${state.format === OutputFormat.PNG ? 'png' : 'jpg'}`;
       link.click();
       return;
     }
 
     setIsZipping(true);
     try {
+      if (typeof JSZip === 'undefined') throw new Error('JSZip not loaded');
       const zip = new JSZip();
       selectedPages.forEach((page) => {
         const imgData = page.dataUrl.split(',')[1];
@@ -157,10 +161,11 @@ const App: React.FC = () => {
       const content = await zip.generateAsync({ type: 'blob' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(content);
-      link.download = `${state.fileName}_Photos.zip`;
+      link.download = `${state.fileName}_BoSuuTap.zip`;
       link.click();
     } catch (err) {
-      alert('Lỗi khi tạo file nén.');
+      console.error(err);
+      alert('Lỗi khi nén file. Hãy thử tải từng ảnh.');
     } finally {
       setIsZipping(false);
     }
@@ -185,7 +190,7 @@ const App: React.FC = () => {
             cover: data.data.cover
           });
         } else {
-          alert('Link không hợp lệ hoặc không có dữ liệu.');
+          alert('Không tìm thấy dữ liệu từ link này.');
         }
       } else if (mode === 'youtube') {
         const vidIdMatch = inputUrl.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?([^?&/]+)/);
@@ -193,17 +198,19 @@ const App: React.FC = () => {
         if (vidId) {
           setResult({
             id: vidId,
-            title: "YouTube Content",
+            title: "Nội dung YouTube",
             cover: `https://img.youtube.com/vi/${vidId}/maxresdefault.jpg`,
             formats: [
-              { quality: 'Video MP4 (HD)', url: `https://api.vve.pw/api/button/mp4/${vidId}`, type: 'video' },
+              { quality: 'Video MP4', url: `https://api.vve.pw/api/button/mp4/${vidId}`, type: 'video' },
               { quality: 'Audio MP3', url: `https://api.vve.pw/api/button/mp3/${vidId}`, type: 'audio' }
             ]
           });
+        } else {
+          alert('Link YouTube không hợp lệ.');
         }
       }
     } catch (e) {
-      alert('Lỗi kết nối API.');
+      alert('Lỗi khi lấy dữ liệu. Vui lòng thử lại.');
     } finally {
       setLoading(false);
     }
@@ -227,30 +234,28 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#fcfcfd] text-slate-900">
-      <header className="bg-white/80 backdrop-blur-md border-b sticky top-0 z-[100] transition-all">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 group cursor-pointer" onClick={() => window.location.reload()}>
-            <div className="bg-indigo-600 p-2.5 rounded-2xl text-white shadow-indigo-200 shadow-xl group-hover:rotate-12 transition-transform">
+      <header className="bg-white/90 backdrop-blur-md border-b sticky top-0 z-[100]">
+        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.location.reload()}>
+            <div className="bg-indigo-600 p-2.5 rounded-2xl text-white shadow-lg shadow-indigo-100">
               <Layers size={22} strokeWidth={2.5} />
             </div>
-            <div className="hidden sm:block">
-              <h1 className="text-xl font-black tracking-tight text-slate-900 leading-none">
-                NHUTCODER <span className="text-indigo-600">TOOLBOX</span>
-              </h1>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Version 6.0 Stable</p>
+            <div>
+              <h1 className="text-xl font-black text-slate-900 leading-none">NHUTCODER <span className="text-indigo-600">TOOL</span></h1>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Multi-tool Platform</p>
             </div>
           </div>
 
-          <nav className="flex items-center bg-slate-100/80 p-1.5 rounded-2xl">
+          <nav className="flex items-center bg-slate-100/80 p-1 rounded-xl">
             {[
-              { id: 'pdf', icon: <FileText size={18} />, label: 'PDF Conv' },
+              { id: 'pdf', icon: <FileText size={18} />, label: 'Chuyển PDF' },
               { id: 'tiktok', icon: <Video size={18} />, label: 'TikTok' },
               { id: 'youtube', icon: <Youtube size={18} />, label: 'YouTube' }
             ].map(tab => (
               <button 
                 key={tab.id}
                 onClick={() => { setMode(tab.id as AppMode); setResult(null); }}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${mode === tab.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${mode === tab.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
               >
                 {tab.icon}
                 <span className="hidden md:inline">{tab.label}</span>
@@ -263,90 +268,86 @@ const App: React.FC = () => {
       <main className="flex-1 max-w-7xl mx-auto w-full p-6 md:p-12">
         {mode === 'pdf' ? (
           state.pages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center min-h-[60vh] animate-in fade-in duration-700">
-              <div className="text-center mb-12">
-                <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-full text-[11px] font-black uppercase tracking-widest mb-6 border border-emerald-100">
-                  <ShieldCheck size={14} /> Private & No AI Used
+            <div className="flex flex-col items-center justify-center min-h-[50vh]">
+              <div className="text-center mb-10">
+                <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-full text-[11px] font-black uppercase tracking-widest mb-6">
+                  <ShieldCheck size={14} /> Bảo mật & Xử lý tại máy
                 </div>
-                <h2 className="text-5xl md:text-7xl font-black text-slate-900 mb-6 tracking-tight">
-                  Chuyển PDF <br/><span className="text-indigo-600 underline decoration-indigo-100">Sang Ảnh</span>
-                </h2>
-                <p className="text-lg text-slate-500 max-w-xl mx-auto font-medium">
-                  Chuyển đổi từng trang PDF thành hình ảnh chất lượng cao 4K trực tiếp trong trình duyệt. <br/>Dữ liệu của bạn không bao giờ rời khỏi thiết bị.
+                <h2 className="text-5xl font-black text-slate-900 mb-4 tracking-tight">Chuyển PDF Sang Ảnh</h2>
+                <p className="text-slate-500 max-w-lg mx-auto font-medium text-lg">
+                  Kéo thả file PDF vào đây để chuyển đổi thành JPG/PNG chất lượng cao mà không cần tải file lên server.
                 </p>
               </div>
 
               <div 
                 onDragEnter={onDrag} onDragLeave={onDrag} onDragOver={onDrag} onDrop={onDrop}
-                className={`w-full max-w-3xl border-4 border-dashed rounded-[3rem] p-16 md:p-24 flex flex-col items-center justify-center cursor-pointer transition-all duration-500
-                  ${dragActive ? 'border-indigo-500 bg-indigo-50/50 scale-[0.98]' : 'border-slate-200 bg-white hover:border-indigo-300 hover:shadow-2xl shadow-sm'}`}
+                className={`w-full max-w-2xl border-4 border-dashed rounded-[2.5rem] p-16 flex flex-col items-center justify-center cursor-pointer transition-all
+                  ${dragActive ? 'border-indigo-500 bg-indigo-50/50' : 'border-slate-200 bg-white hover:border-indigo-300 hover:shadow-xl'}`}
                 onClick={() => fileInputRef.current?.click()}
               >
                 <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" onChange={(e) => e.target.files?.[0] && processPdf(e.target.files[0])} />
-                <div className="bg-indigo-50 p-8 rounded-[2rem] text-indigo-600 mb-8 shadow-inner">
-                  {state.isProcessing ? <Loader2 size={56} className="animate-spin" /> : <FileUp size={56} />}
+                <div className="bg-indigo-50 p-6 rounded-3xl text-indigo-600 mb-6">
+                  {state.isProcessing ? <Loader2 size={48} className="animate-spin" /> : <FileUp size={48} />}
                 </div>
-                <p className="text-2xl font-black text-slate-800 mb-2">
-                  {state.isProcessing ? 'Đang trích xuất...' : 'Kéo thả file PDF tại đây'}
+                <p className="text-xl font-bold text-slate-800">
+                  {state.isProcessing ? 'Đang trích xuất trang...' : 'Nhấn hoặc kéo thả PDF tại đây'}
                 </p>
-                <p className="text-slate-400 font-bold text-sm tracking-widest uppercase">Hoặc nhấn để chọn từ thiết bị</p>
               </div>
             </div>
           ) : (
-            <div className="animate-in slide-in-from-bottom-10 duration-500">
-              <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-100 mb-10 flex flex-col lg:flex-row items-center justify-between gap-6">
+            <div className="animate-in fade-in slide-in-from-bottom-5 duration-500">
+              <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-100 mb-8 flex flex-col md:flex-row items-center justify-between gap-6">
                 <div className="flex items-center gap-4">
-                  <div className="bg-indigo-600 p-3.5 rounded-2xl text-white shadow-lg shadow-indigo-100">
-                    <FileText size={28} />
+                  <div className="bg-indigo-600 p-3 rounded-xl text-white shadow-md">
+                    <FileText size={24} />
                   </div>
                   <div>
-                    <h3 className="text-xl font-black text-slate-900 truncate max-w-[200px] md:max-w-md">{state.fileName}.pdf</h3>
-                    <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">{state.pages.length} TRANG ĐÃ SẴN SÀNG</p>
+                    <h3 className="text-lg font-bold text-slate-900 truncate max-w-[250px]">{state.fileName}.pdf</h3>
+                    <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Đã sẵn sàng {state.pages.length} trang</p>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-                  <div className="bg-slate-50 p-1.5 rounded-2xl flex items-center gap-1">
-                    <button onClick={() => setState(s => ({ ...s, format: OutputFormat.PNG }))} className={`px-5 py-2 rounded-xl text-xs font-black transition-all ${state.format === OutputFormat.PNG ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'}`}>PNG</button>
-                    <button onClick={() => setState(s => ({ ...s, format: OutputFormat.JPG }))} className={`px-5 py-2 rounded-xl text-xs font-black transition-all ${state.format === OutputFormat.JPG ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'}`}>JPG</button>
+                <div className="flex items-center gap-3">
+                  <div className="bg-slate-50 p-1 rounded-xl flex">
+                    <button onClick={() => setState(s => ({ ...s, format: OutputFormat.PNG }))} className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${state.format === OutputFormat.PNG ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'}`}>PNG</button>
+                    <button onClick={() => setState(s => ({ ...s, format: OutputFormat.JPG }))} className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${state.format === OutputFormat.JPG ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'}`}>JPG</button>
                   </div>
                   <button 
                     onClick={downloadAllPdf} 
                     disabled={isZipping}
-                    className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-slate-900 text-white px-8 py-4 rounded-2xl font-black hover:bg-indigo-600 transition-all shadow-lg disabled:opacity-50"
+                    className="flex items-center gap-2 bg-slate-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-600 transition-all disabled:opacity-50"
                   >
-                    {isZipping ? <Loader2 size={20} className="animate-spin" /> : <Download size={20} />}
-                    TẢI XUỐNG ZIP
+                    {isZipping ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
+                    TẢI ZIP
                   </button>
-                  <button onClick={resetPdfState} className="p-4 bg-red-50 text-red-500 hover:bg-red-100 rounded-2xl transition-all">
-                    <Trash2 size={24} />
+                  <button onClick={resetPdfState} className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors">
+                    <Trash2 size={20} />
                   </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {state.pages.map((page) => (
-                  <div key={page.index} className="group bg-white rounded-[2rem] border border-slate-100 hover:border-indigo-300 transition-all duration-300 overflow-hidden shadow-sm hover:shadow-2xl">
-                    <div className="aspect-[3/4.2] relative bg-slate-50 overflow-hidden">
-                      <img src={page.dataUrl} className="w-full h-full object-contain p-2" alt={`Trang ${page.index}`} loading="lazy" />
-                      <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-                      <div className="absolute bottom-4 right-4 flex gap-2 translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all">
+                  <div key={page.index} className="group bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm hover:shadow-xl transition-all">
+                    <div className="aspect-[3/4] relative bg-slate-50">
+                      <img src={page.dataUrl} className="w-full h-full object-contain p-3" alt={`Trang ${page.index}`} loading="lazy" />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                          <button 
                           onClick={() => {
                             const link = document.createElement('a');
                             link.href = page.dataUrl;
-                            link.download = `${state.fileName}_Trang_${page.index}.${state.format === OutputFormat.PNG ? 'png' : 'jpg'}`;
+                            link.download = `${state.fileName}_P${page.index}.${state.format === OutputFormat.PNG ? 'png' : 'jpg'}`;
                             link.click();
                           }}
-                          className="p-3 bg-white text-indigo-600 rounded-xl shadow-xl hover:bg-indigo-600 hover:text-white transition-all"
+                          className="p-4 bg-white text-indigo-600 rounded-full shadow-lg hover:scale-110 transition-transform"
                          >
-                            <Download size={20} />
+                            <Download size={24} />
                          </button>
                       </div>
                     </div>
-                    <div className="p-5 flex items-center justify-between border-t border-slate-50">
-                      <span className="font-black text-slate-800">Trang {page.index}</span>
-                      <div className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]"></div>
+                    <div className="p-4 flex items-center justify-between font-bold text-slate-700">
+                      <span>Trang {page.index}</span>
+                      <span className="text-[10px] text-slate-300 uppercase">{state.format === OutputFormat.PNG ? 'PNG' : 'JPG'}</span>
                     </div>
                   </div>
                 ))}
@@ -354,26 +355,21 @@ const App: React.FC = () => {
             </div>
           )
         ) : (
-          <div className="flex flex-col items-center animate-in fade-in duration-700">
-             <div className="text-center mb-12">
-                <div className={`inline-flex items-center gap-2 px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest mb-6 ${mode === 'tiktok' ? 'bg-indigo-50 text-indigo-600' : 'bg-red-50 text-red-600'}`}>
-                  {mode === 'tiktok' ? <Zap size={14} className="fill-indigo-600" /> : <Youtube size={14} className="fill-red-600" />}
-                  {mode === 'tiktok' ? 'TikTok Downloader' : 'YouTube Downloader'}
-                </div>
-                <h2 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tight leading-tight uppercase">
-                  Tải Nội Dung <br/><span className={mode === 'tiktok' ? 'text-indigo-600 underline decoration-indigo-100' : 'text-red-600 underline decoration-red-100'}>Tự Động</span>
-                </h2>
+          <div className="flex flex-col items-center">
+             <div className="text-center mb-10">
+                <h2 className="text-4xl font-black text-slate-900 mb-2">Tải Media Nhanh</h2>
+                <p className="text-slate-500 font-medium">Hỗ trợ tải video TikTok không logo và nội dung YouTube.</p>
               </div>
 
-              <form onSubmit={handleMediaDownload} className="w-full max-w-2xl mb-12">
-                <div className="relative group">
-                  <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none text-slate-300 group-focus-within:text-indigo-600 transition-colors">
-                    <LinkIcon size={24} />
+              <form onSubmit={handleMediaDownload} className="w-full max-w-2xl mb-10">
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none text-slate-400">
+                    <LinkIcon size={20} />
                   </div>
                   <input 
                     type="url" 
-                    placeholder="Dán đường dẫn (Link) tại đây..."
-                    className="block w-full pl-16 pr-44 py-7 bg-white border-2 border-slate-100 rounded-3xl focus:ring-8 focus:ring-indigo-50 focus:border-indigo-400 transition-all outline-none text-slate-800 font-bold text-lg shadow-xl shadow-slate-200/50"
+                    placeholder="Dán link TikTok hoặc YouTube vào đây..."
+                    className="block w-full pl-12 pr-32 py-5 bg-white border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-50 focus:border-indigo-400 transition-all outline-none font-medium"
                     value={inputUrl}
                     onChange={(e) => setInputUrl(e.target.value)}
                     required
@@ -381,30 +377,23 @@ const App: React.FC = () => {
                   <button 
                     type="submit"
                     disabled={loading}
-                    className="absolute right-3 top-3 bottom-3 bg-slate-900 text-white px-8 rounded-2xl hover:bg-indigo-600 transition-all font-black flex items-center gap-2 disabled:opacity-50 shadow-lg"
+                    className="absolute right-2.5 top-2.5 bottom-2.5 bg-indigo-600 text-white px-6 rounded-xl hover:bg-indigo-700 transition-all font-bold disabled:opacity-50"
                   >
-                    {loading ? <Loader2 className="animate-spin" size={20} /> : <Play size={20} className="fill-white" />}
-                    <span>Xử Lý</span>
+                    {loading ? <Loader2 className="animate-spin" size={20} /> : 'Tải Về'}
                   </button>
                 </div>
               </form>
 
               {result && (
-                <div className="w-full max-w-4xl bg-white rounded-[3rem] border border-slate-100 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-500">
-                  <div className="p-8 md:p-12 flex flex-col md:flex-row gap-12">
-                    <div className="w-full md:w-[320px] shrink-0 aspect-video md:aspect-[9/16] bg-slate-900 rounded-3xl overflow-hidden relative shadow-2xl group">
-                      {result.cover && <img src={result.cover} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="Thumbnail" />}
+                <div className="w-full max-w-4xl bg-white rounded-[2rem] border border-slate-100 shadow-xl overflow-hidden animate-in zoom-in-95">
+                  <div className="p-8 flex flex-col md:flex-row gap-8">
+                    <div className="w-full md:w-[280px] shrink-0 aspect-video md:aspect-[9/16] bg-slate-100 rounded-2xl overflow-hidden relative">
+                      {result.cover && <img src={result.cover} className="w-full h-full object-cover" alt="Preview" />}
                     </div>
                     
-                    <div className="flex-1 flex flex-col justify-center">
-                      <h3 className="text-3xl font-black text-slate-900 mb-6 leading-tight">
-                        {result.title || 'Đã tìm thấy nội dung'}
-                      </h3>
-                      <p className="text-slate-400 font-bold mb-8 flex items-center gap-2">
-                        <CheckCircle2 className="text-emerald-500" size={20} /> Ready to Download
-                      </p>
-
-                      <div className="space-y-4">
+                    <div className="flex-1">
+                      <h3 className="text-2xl font-bold text-slate-900 mb-4">{result.title || 'Đã tìm thấy nội dung'}</h3>
+                      <div className="space-y-3">
                         {mode === 'tiktok' && result.images && result.images.length > 0 ? (
                           <button 
                             onClick={async () => {
@@ -423,24 +412,23 @@ const App: React.FC = () => {
                               a.click();
                               setIsZipping(false);
                             }}
-                            disabled={isZipping}
-                            className="w-full flex items-center justify-center gap-4 bg-indigo-600 text-white py-6 rounded-3xl font-black text-xl hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100"
+                            className="w-full flex items-center justify-center gap-3 bg-indigo-600 text-white py-4 rounded-xl font-bold hover:bg-indigo-700 transition-all"
                           >
-                            <FolderArchive size={24} /> TẢI ZIP ẢNH ({result.images.length})
+                            <FolderArchive size={20} /> TẢI {result.images.length} ẢNH (ZIP)
                           </button>
                         ) : result.url && (
-                          <a href={result.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-4 bg-indigo-600 text-white py-6 rounded-3xl font-black text-xl hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100">
-                            <Download size={24} /> TẢI VIDEO NO WATERMARK
+                          <a href={result.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-3 bg-indigo-600 text-white py-4 rounded-xl font-bold hover:bg-indigo-700 transition-all">
+                            <Download size={20} /> TẢI VIDEO (KHÔNG LOGO)
                           </a>
                         )}
 
                         {mode === 'youtube' && result.formats?.map((f, i) => (
-                          <a key={i} href={f.url} target="_blank" rel="noopener noreferrer" className={`flex items-center justify-between px-8 py-6 rounded-3xl font-black text-lg transition-all shadow-md hover:-translate-y-1 ${f.type === 'video' ? 'bg-slate-900 text-white hover:bg-indigo-600' : 'bg-slate-50 text-indigo-600 border border-indigo-100'}`}>
-                            <div className="flex items-center gap-4">
-                              {f.type === 'video' ? <Monitor size={24} /> : <Music size={24} />}
+                          <a key={i} href={f.url} target="_blank" rel="noopener noreferrer" className={`flex items-center justify-between px-6 py-4 rounded-xl font-bold transition-all ${f.type === 'video' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-indigo-600'}`}>
+                            <div className="flex items-center gap-3">
+                              {f.type === 'video' ? <Monitor size={20} /> : <Music size={20} />}
                               <span>{f.quality}</span>
                             </div>
-                            <ExternalLink size={20} />
+                            <ExternalLink size={18} />
                           </a>
                         ))}
                       </div>
@@ -452,23 +440,13 @@ const App: React.FC = () => {
         )}
       </main>
 
-      <footer className="bg-white border-t border-slate-100 py-12 mt-20">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-8 text-center md:text-left">
-          <div className="flex flex-col gap-2">
-            <span className="font-black text-xl text-slate-900 tracking-tighter">NHUTCODER TOOLBOX</span>
-            <p className="text-slate-400 text-sm font-medium italic">An all-in-one local toolkit for daily tasks.</p>
-          </div>
-          <div className="flex items-center gap-6">
-            <a href="https://github.com/nhut0902-pr" target="_blank" rel="noopener noreferrer" className="p-3 bg-slate-50 rounded-2xl hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 transition-all">
-              <Github size={24} />
+      <footer className="bg-white border-t border-slate-100 py-8 text-center">
+        <div className="max-w-7xl mx-auto px-6 text-slate-400 text-sm font-medium flex flex-col md:flex-row items-center justify-between gap-4">
+          <p>© 2024 NHUTCODER - Private & Secure Toolbox</p>
+          <div className="flex items-center gap-4">
+            <a href="https://github.com/nhut0902-pr" className="hover:text-indigo-600 transition-colors flex items-center gap-1">
+              <Github size={16} /> GitHub
             </a>
-            <div className="flex items-center gap-3 bg-indigo-50 px-5 py-3 rounded-2xl border border-indigo-100">
-               <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white text-lg font-black shadow-md">N</div>
-               <div className="flex flex-col text-left">
-                  <p className="font-black text-indigo-900 text-sm leading-none">NHUTCODER</p>
-                  <span className="text-indigo-400 text-[10px] font-bold uppercase tracking-widest mt-0.5">Premium Tools</span>
-               </div>
-            </div>
           </div>
         </div>
       </footer>

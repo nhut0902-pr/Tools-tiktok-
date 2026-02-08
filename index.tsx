@@ -1,31 +1,25 @@
-
 import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App.tsx';
+import { createRoot } from 'react-dom/client';
+import App from './App';
 
-// Khởi tạo process.env giả lập để tránh lỗi ReferenceError trên trình duyệt
-if (typeof (window as any).process === 'undefined') {
-  (window as any).process = { env: {} };
-}
+const container = document.getElementById('root');
 
-const rootElement = document.getElementById('root');
-if (!rootElement) {
-  throw new Error("Could not find root element to mount to");
-}
-
-try {
-  const root = ReactDOM.createRoot(rootElement);
-  root.render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>
-  );
-} catch (error) {
-  console.error("Lỗi khi render ứng dụng:", error);
-  rootElement.innerHTML = `
-    <div style="padding: 20px; text-align: center; font-family: sans-serif;">
-      <h2>Đã xảy ra lỗi khi tải ứng dụng</h2>
-      <p>Vui lòng làm mới trang hoặc kiểm tra kết nối mạng.</p>
-    </div>
-  `;
+if (!container) {
+  console.error("Không tìm thấy phần tử root!");
+} else {
+  try {
+    const root = createRoot(container);
+    root.render(<App />);
+  } catch (err) {
+    console.error("Lỗi khởi tạo ứng dụng:", err);
+    container.innerHTML = `
+      <div style="height: 100vh; display: flex; align-items: center; justify-content: center; font-family: sans-serif; text-align: center; padding: 20px;">
+        <div>
+          <h1 style="color: #ef4444;">Hệ thống gặp sự cố tải</h1>
+          <p style="color: #64748b;">Vui lòng thử tải lại trang (F5) hoặc xóa cache trình duyệt.</p>
+          <button onclick="window.location.reload()" style="padding: 10px 20px; background: #4f46e5; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">Tải lại ngay</button>
+        </div>
+      </div>
+    `;
+  }
 }
